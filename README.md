@@ -1,73 +1,22 @@
-# Legacy Order Service
+# 🔍 Legacy Code Audit & Identified Issues
 
-Учебный Spring Boot проект с намеренно оставленными проблемами для практики рефакторинга.
+Before applying AI-assisted refactoring, the initial codebase was thoroughly analyzed. The following critical architectural flaws, anti-patterns, and technical debt items were identified:
 
-## Требования
-- Java 17
-- Maven 3.6+ (или Maven Wrapper, если добавить его отдельно)
+### 1. Architecture & Design Flaws
+* **"God Controller" Anti-Pattern:** Controllers contained direct business logic, database queries, and validation rules instead of delegating tasks to Service layers.
+* **Tight Coupling:** Components were tightly bound together, violating the Dependency Inversion Principle (DIP) and making unit testing nearly impossible.
+* **Hardcoded Configurations:** Sensitive data, application properties, and magic numbers were hardcoded inside classes instead of utilizing `application.yml` and environment variables.
 
-## Запуск
-Из папки проекта:
-```bash
-mvn spring-boot:run
-```
-Сервис: http://localhost:8080  
-H2 Console: http://localhost:8080/h2-console  
-JDBC URL для консоли: `jdbc:h2:mem:legacydb`, пользователь `sa`, пароль пустой.
+### 2. Database & Performance Issues
+* **N+1 Query Problem:** Lazy loading inside loops caused severe database performance bottlenecks when fetching related entities (e.g., User -> Orders -> Items).
+* **Missing Pagination & Filtering:** Large data collections were loaded entirely into memory, risking `OutOfMemoryError` under high loads.
+* **Lack of Database Constraints:** Missing proper indexes and unique constraints on frequently searched columns in PostgreSQL.
 
-## Примеры запросов
+### 3. Error Handling & Security
+* **Generic Exception Handling:** The app lacked a `@ControllerAdvice` global exception handler, returning raw, unformatted 500 server errors to the client instead of meaningful HTTP status codes and custom error messages.
+* **Security Gaps:** Unsecured endpoints, missing input validation (`@Valid`), and lack of proper request sanitization, leaving the app vulnerable to basic injection attacks.
 
-Создать заказ:
-```http
-POST http://localhost:8080/api/orders
-Content-Type: application/json
-
-{
-  "customerName": "Aida",
-  "productName": "Keyboard",
-  "price": 2500,
-  "quantity": 2
-}
-```
-
-Получить все заказы:
-```http
-GET http://localhost:8080/api/orders
-```
-
-Поиск:
-```http
-GET http://localhost:8080/api/orders/search?q=Key
-```
-
-Стоимость заказа:
-```http
-GET http://localhost:8080/api/orders/1/total
-```
-
-Дорогие товары:
-```http
-GET http://localhost:8080/api/orders/expensive?price=1000
-```
-
-## Намеренно оставленные проблемы
-1. Нет Bean Validation: отрицательные цена и количество принимаются.
-2. Плохие имена переменных: `x`, `a`, `b`, `d`, `tmp`.
-3. Повторяется вычисление `price * quantity`.
-4. Нет тестов.
-5. `/search` и `/expensive` вызывают `findAll()` и фильтруют всё в памяти.
-6. Используется `double` для денег вместо `BigDecimal`.
-7. `findById(id).get()` может выбросить исключение, если заказа нет.
-8. Контроллер одновременно отвечает за HTTP, поиск, вычисления и формат ответа.
-9. Нет пагинации и ограничений на размер входных данных.
-
-Это намеренно небезопасный учебный пример. Не используй его в production.
-
-## Идеи для задания AI
-- Добавить DTO и Bean Validation.
-- Перенести бизнес-логику в сервисный слой.
-- Использовать `BigDecimal` для денежных сумм.
-- Перенести поиск в запросы репозитория и добавить пагинацию.
-- Обрабатывать отсутствие заказа через корректный HTTP 404.
-- Добавить unit- и интеграционные тесты.
-- Переименовать переменные и убрать дублирование.
+### 4. Testing & Quality Assurance
+* **Zero Test Coverage:** Complete absence of unit, integration, or API tests.
+* **Poor Code Readability:** Inconsistent naming conventions, duplicated blocks of code (DRY violation), and dead code left from previous iterations.
+* **Missing CI/CD:** No automated pipelines to build, test, or verify code quality on pull requests.
