@@ -1,73 +1,139 @@
 # Legacy Order Service
 
-Учебный Spring Boot проект с намеренно оставленными проблемами для практики рефакторинга.
+A Spring Boot REST service for managing orders. The codebase is layered into Controller, Service, and Repository. It uses Jakarta Bean Validation, `BigDecimal` for money, SQL-backed search and filtering, pagination, and proper HTTP error responses.
 
-## Требования
+## Requirements
+
 - Java 17
-- Maven 3.6+ (или Maven Wrapper, если добавить его отдельно)
+- Maven 3.6+
 
-## Запуск
-Из папки проекта:
+## Run
+
+From the project root:
+
 ```bash
 mvn spring-boot:run
 ```
-Сервис: http://localhost:8080  
-H2 Console: http://localhost:8080/h2-console  
-JDBC URL для консоли: `jdbc:h2:mem:legacydb`, пользователь `sa`, пароль пустой.
 
-## Примеры запросов
+- Service: http://localhost:8080
+- H2 Console: http://localhost:8080/h2-console
+- JDBC URL: `jdbc:h2:mem:legacydb`
+- Username: `sa`
+- Password: empty
 
-Создать заказ:
-```http
-POST http://localhost:8080/api/orders
-Content-Type: application/json
+Tests:
 
+```bash
+mvn test
+```
+
+## Architecture
+
+```
+controller  — HTTP, request validation, pagination
+service     — business logic (total calculation, CRUD)
+repository  — Spring Data JPA queries
+entity      — JPA Order model
+dto         — request and response contracts
+exception   — 404 / 400 (ProblemDetail)
+```
+
+Money fields `price` and `total` are `BigDecimal`. The order total is computed on the server as `price * quantity`.
+
+## API
+
+Base path: `/api/orders`.
+
+Existing routes are preserved. List endpoints return a Spring Data `Page` object (`content`, `totalElements`, `totalPages`, `size`, `number`). Defaults: `page=0`, `size=20`, sort `id,asc`. Query params: `page`, `size`, `sort`.
+
+### Create order
+
+`POST /api/orders` — **201 Created**
+
+```json
 {
   "customerName": "Aida",
   "productName": "Keyboard",
-  "price": 2500,
+  "price": 2500.00,
   "quantity": 2
 }
 ```
 
-Получить все заказы:
+Do not send `total`; the service calculates it.
+
+Validation:
+
+- `customerName`, `productName` — not blank
+- `price` — greater than 0
+- `quantity` — at least 1
+
+Invalid body → **400**.
+
+### List orders
+
 ```http
-GET http://localhost:8080/api/orders
+GET /api/orders
+GET /api/orders?page=0&size=10&sort=id,asc
 ```
 
-Поиск:
+### Search
+
+Case-insensitive search by customer or product name (JPQL, not in-memory `findAll`):
+
 ```http
-GET http://localhost:8080/api/orders/search?q=Key
+GET /api/orders/search?q=Key
 ```
 
-Стоимость заказа:
+Blank `q` → **400**.
+
+### Expensive orders
+
+Orders whose `price` is strictly greater than the threshold (default `100`):
+
 ```http
-GET http://localhost:8080/api/orders/1/total
+GET /api/orders/expensive
+GET /api/orders/expensive?price=1000
 ```
 
-Дорогие товары:
+### Order total
+
 ```http
-GET http://localhost:8080/api/orders/expensive?price=1000
+GET /api/orders/1/total
 ```
 
-## Намеренно оставленные проблемы
-1. Нет Bean Validation: отрицательные цена и количество принимаются.
-2. Плохие имена переменных: `x`, `a`, `b`, `d`, `tmp`.
-3. Повторяется вычисление `price * quantity`.
-4. Нет тестов.
-5. `/search` и `/expensive` вызывают `findAll()` и фильтруют всё в памяти.
-6. Используется `double` для денег вместо `BigDecimal`.
-7. `findById(id).get()` может выбросить исключение, если заказа нет.
-8. Контроллер одновременно отвечает за HTTP, поиск, вычисления и формат ответа.
-9. Нет пагинации и ограничений на размер входных данных.
+Response:
 
-Это намеренно небезопасный учебный пример. Не используй его в production.
+```json
+{
+  "orderId": 1,
+  "total": 5000.00
+}
+```
 
-## Идеи для задания AI
-- Добавить DTO и Bean Validation.
-- Перенести бизнес-логику в сервисный слой.
-- Использовать `BigDecimal` для денежных сумм.
-- Перенести поиск в запросы репозитория и добавить пагинацию.
-- Обрабатывать отсутствие заказа через корректный HTTP 404.
-- Добавить unit- и интеграционные тесты.
-- Переименовать переменные и убрать дублирование.
+Missing order → **404**.
+
+### Update order
+
+`PUT /api/orders/{id}` — same body as create. Missing order → **404**. Invalid body → **400**.
+
+### Delete order
+
+```http
+DELETE /api/orders/1
+```
+
+Response: `{ "message": "deleted" }`. Missing order → **404**.
+
+## Errors
+
+Responses use RFC 7807 `ProblemDetail`.
+
+| Case | HTTP |
+|------|------|
+| Order not found | 404 |
+| Bean Validation failure | 400 |
+
+## Tests
+
+- `src/test/java/.../service/OrderServiceTest.java` — unit tests for business logic (Mockito)
+- `src/test/java/.../controller/OrderControllerIntegrationTest.java` — API integration tests (MockMvc + H2)
